@@ -1,0 +1,33 @@
+{
+  "booking": {
+    "site": "Bromo",
+    "pintu_masuk": "Cemoro Lawang",
+    "jenis_kendaraan": "Roda 4",
+    "jumlah_kendaraan": "1",
+    "tanggal_berangkat": "16-05-2026",
+    "tanggal_pulang": "17-05-2026"
+  },
+  "ketua": {
+    "nama": "Tukul Ahmad",
+    "kebangsaan": "Indonesia",
+    "jenis_kelamin": "Laki-laki",
+    "jenis_identitas": "KTP",
+    "nomor_identitas": "3501234567890001",
+    "no_telp": "081234567890"
+  },
+  "anggota": [
+    {
+      "anggota_laki_laki": 2,
+      "anggota_perempuan": 4,
+      "kebangsaan": "Indonesia"
+    },
+    {
+      "anggota_laki_laki": 1,
+      "anggota_perempuan": 0,
+      "kebangsaan": "Algeria"
+    }
+  ],
+  "metode_pembayaran": "BNI",
+  "setujui_syarat": true,
+  "submit": false
+}
