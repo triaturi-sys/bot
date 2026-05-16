@@ -29,5 +29,6 @@
   ],
   "metode_pembayaran": "BNI",
   "setujui_syarat": true,
+  "pause_for_captcha": true,
   "submit": false
 }

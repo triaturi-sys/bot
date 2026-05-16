@@ -94,6 +94,19 @@ Edit `config.json` sesuai kebutuhan:
 | `anggota` | Array — tiap entri = satu kali klik tombol **Tambah** + isi modal **Form Anggota**. Bisa ada banyak grup (misal grup WNI dan grup WNA). |
 | `submit` | `false` = bot hanya mengisi form, **tidak** menekan Confirm. `true` = bot menekan Confirm Booking. |
 | `setujui_syarat` | Centang checkbox persyaratan. |
+| `pause_for_captcha` | `true` (default) = jika CAPTCHA terdeteksi, bot **berhenti dan menunggu** kamu menyelesaikannya manual di browser, lalu tekan Enter di terminal untuk lanjut. |
+
+> ### CAPTCHA — manual
+>
+> Bot **TIDAK** menyelesaikan CAPTCHA secara otomatis (reCAPTCHA / hCaptcha / image captcha). Saat terdeteksi, bot akan pause dan menampilkan pesan di terminal:
+>
+> ```
+> CAPTCHA terdeteksi (atau perlu diverifikasi).
+> Silakan selesaikan CAPTCHA di JENDELA BROWSER yang terbuka.
+> Setelah selesai, tekan ENTER di terminal ini untuk melanjutkan.
+> ```
+>
+> Selesaikan CAPTCHA di browser → tekan **Enter** di terminal → bot lanjut. Pastikan `HEADLESS=false` agar browser terlihat.
 
 ## 4. Menjalankan
 

@@ -104,6 +104,45 @@ def fill_if_visible(page: Page, selector: str, value: str) -> None:
 # ---------------------------------------------------------------------------
 # Bot steps
 # ---------------------------------------------------------------------------
+def has_captcha(page: Page) -> bool:
+    """Deteksi keberadaan reCAPTCHA / hCaptcha / CAPTCHA generik di halaman."""
+    selectors = [
+        'iframe[src*="recaptcha"]',
+        'iframe[src*="hcaptcha"]',
+        'div.g-recaptcha',
+        'div.h-captcha',
+        '[id*="captcha" i]',
+        'img[src*="captcha" i]',
+        'input[name*="captcha" i]',
+    ]
+    for sel in selectors:
+        try:
+            if page.locator(sel).first.is_visible(timeout=500):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def wait_for_manual_captcha(page: Page) -> None:
+    """Berhenti dan minta user menyelesaikan CAPTCHA manual di browser.
+
+    Bot HANYA menunggu — tidak men-solve. User wajib:
+      1. Selesaikan CAPTCHA di jendela browser yang terbuka
+      2. Tekan Enter di terminal untuk lanjut
+    """
+    log("=" * 60)
+    log("CAPTCHA terdeteksi (atau perlu diverifikasi).")
+    log("Silakan selesaikan CAPTCHA di JENDELA BROWSER yang terbuka.")
+    log("Setelah selesai, tekan ENTER di terminal ini untuk melanjutkan.")
+    log("=" * 60)
+    try:
+        input(">> Tekan ENTER setelah CAPTCHA selesai... ")
+    except EOFError:
+        log("Stdin tidak tersedia, menunggu 90 detik...")
+        page.wait_for_timeout(90_000)
+
+
 def login_if_needed(page: Page) -> None:
     """Login otomatis jika halaman redirect ke login.
     Asumsi: form login memiliki input email/username & password.
@@ -127,6 +166,11 @@ def login_if_needed(page: Page) -> None:
         if page.locator(sel).count():
             page.locator(sel).first.fill(password)
             break
+
+    # Jika form login mengandung CAPTCHA, pause sebelum submit
+    if has_captcha(page):
+        wait_for_manual_captcha(page)
+
     # Submit
     for sel in [
         'button[type="submit"]',
@@ -309,11 +353,27 @@ def fill_payment_and_submit(page: Page, cfg: dict[str, Any]) -> None:
         except Exception:
             cb.click()
 
+    # Cek CAPTCHA SEBELUM submit. Jika ada, bot pause menunggu user.
+    pause_for_captcha = cfg.get("pause_for_captcha", True)
+    if pause_for_captcha and has_captcha(page):
+        wait_for_manual_captcha(page)
+
     if cfg.get("submit", False):
         log("Menekan tombol CONFIRM BOOKING...")
         page.locator('button:has-text("CONFIRM BOOKING"), '
                      'button:has-text("Confirm Booking")').first.click()
-        page.wait_for_load_state("networkidle", timeout=60_000)
+        # Setelah submit, kemungkinan muncul CAPTCHA atau halaman pembayaran
+        # yang juga butuh aksi manual. Beri waktu, lalu cek lagi.
+        try:
+            page.wait_for_load_state("networkidle", timeout=20_000)
+        except PlaywrightTimeoutError:
+            pass
+        if pause_for_captcha and has_captcha(page):
+            wait_for_manual_captcha(page)
+            try:
+                page.wait_for_load_state("networkidle", timeout=60_000)
+            except PlaywrightTimeoutError:
+                pass
     else:
         log("submit=false → form sudah terisi, biarkan user yang menekan tombol.")
 
