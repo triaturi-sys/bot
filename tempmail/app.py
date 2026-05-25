@@ -284,7 +284,7 @@ def api_stats():
 def start_smtp_server():
     """Jalankan SMTP server di background thread."""
     handler = TempMailHandler()
-    controller = Controller(handler, hostname="0.0.0.0", port=2525)
+    controller = Controller(handler, hostname="127.0.0.1", port=2525)
     controller.start()
     print(f"[SMTP] Server berjalan di port 2525 untuk domain @{DOMAIN}")
     return controller
