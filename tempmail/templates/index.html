@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TempMail @{{ domain }} - Email Sementara Gratis</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 40px 0 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(to right, #00d2ff, #3a7bd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #a0a0b0;
+            font-size: 1.1em;
+        }
+
+        /* Email Generator Card */
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .email-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(0, 210, 255, 0.3);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+        }
+
+        .email-display .email-icon {
+            font-size: 1.5em;
+        }
+
+        .email-display .email-text {
+            flex: 1;
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #00d2ff;
+            word-break: break-all;
+        }
+
+        .email-display .email-placeholder {
+            flex: 1;
+            font-size: 1.1em;
+            color: #666;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d2ff, #3a7bd5);
+            color: #fff;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+            color: #fff;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e, #38ef7d);
+            color: #fff;
+        }
+
+        .btn-copy {
+            background: rgba(0, 210, 255, 0.2);
+            color: #00d2ff;
+            border: 1px solid rgba(0, 210, 255, 0.4);
+            padding: 8px 16px;
+            font-size: 0.9em;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* Custom Username Input */
+        .custom-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .custom-input-group input {
+            flex: 1;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .custom-input-group input:focus {
+            border-color: #00d2ff;
+        }
+
+        .custom-input-group input::placeholder {
+            color: #666;
+        }
+
+        .custom-input-group .domain-suffix {
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            background: rgba(0, 210, 255, 0.1);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            border-radius: 8px;
+            color: #00d2ff;
+            font-weight: 600;
+        }
+
+        /* Timer */
+        .timer {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: rgba(255, 165, 0, 0.1);
+            border: 1px solid rgba(255, 165, 0, 0.3);
+            border-radius: 8px;
+            color: #ffa500;
+            font-size: 0.9em;
+            margin-top: 15px;
+        }
+
+        .timer.active {
+            display: flex;
+        }
+
+        /* Inbox */
+        .inbox-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .inbox-header h2 {
+            font-size: 1.4em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge {
+            background: #00d2ff;
+            color: #000;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            font-weight: 700;
+        }
+
+        .email-list {
+            list-style: none;
+        }
+
+        .email-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 18px 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .email-item:hover {
+            background: rgba(0, 210, 255, 0.05);
+            border-color: rgba(0, 210, 255, 0.2);
+            transform: translateX(5px);
+        }
+
+        .email-item.unread {
+            border-left: 3px solid #00d2ff;
+        }
+
+        .email-item .email-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .email-item .email-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .email-item .email-from {
+            font-weight: 600;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .email-item .email-subject {
+            color: #a0a0b0;
+            font-size: 0.9em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .email-item .email-date {
+            color: #666;
+            font-size: 0.8em;
+            white-space: nowrap;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state .empty-icon {
+            font-size: 4em;
+            margin-bottom: 15px;
+        }
+
+        .empty-state p {
+            font-size: 1.1em;
+        }
+
+        .empty-state .hint {
+            font-size: 0.9em;
+            margin-top: 10px;
+            color: #555;
+        }
+
+        /* Email Detail Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .modal {
+            background: #1a1a2e;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 700px;
+            margin-top: 40px;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-header h3 {
+            font-size: 1.2em;
+            flex: 1;
+            margin-right: 15px;
+            word-break: break-word;
+        }
+
+        .modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #fff;
+            font-size: 1.2em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 70, 70, 0.3);
+        }
+
+        .modal-meta {
+            padding: 15px 25px;
+            background: rgba(0, 0, 0, 0.2);
+            font-size: 0.9em;
+            color: #a0a0b0;
+        }
+
+        .modal-meta p {
+            margin-bottom: 5px;
+        }
+
+        .modal-body {
+            padding: 25px;
+            min-height: 200px;
+            color: #ddd;
+            line-height: 1.6;
+        }
+
+        .modal-body iframe {
+            width: 100%;
+            min-height: 300px;
+            border: none;
+            background: #fff;
+            border-radius: 8px;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(0, 210, 255, 0.3);
+            border-top-color: #00d2ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 14px 24px;
+            background: rgba(0, 210, 255, 0.9);
+            color: #000;
+            border-radius: 8px;
+            font-weight: 600;
+            z-index: 2000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* Refresh indicator */
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: #38ef7d;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .custom-input-group {
+                flex-direction: column;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .email-display {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .email-display .email-text {
+                font-size: 1em;
+            }
+
+            .inbox-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>&#9993; TempMail</h1>
+            <p>Email custom permanen dengan domain <strong>@{{ domain }}</strong></p>
+        </div>
+
+        <!-- Email Generator -->
+        <div class="card">
+            <div class="custom-input-group">
+                <input type="text" id="customUsername" placeholder="Ketik username (opsional) atau generate random..." autocomplete="off">
+                <div class="domain-suffix">@{{ domain }}</div>
+            </div>
+
+            <div class="email-display" id="emailDisplay">
+                <span class="email-icon">&#128233;</span>
+                <span class="email-placeholder" id="emailPlaceholder">Klik tombol di bawah untuk generate email...</span>
+                <span class="email-text" id="emailText" style="display:none;"></span>
+                <button class="btn btn-copy" id="btnCopy" style="display:none;" onclick="copyEmail()">&#128203; Copy</button>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="generateEmail()">&#9889; Generate Email</button>
+                <button class="btn btn-secondary" onclick="generateEmail(true)">&#127922; Random</button>
+                <button class="btn btn-danger" id="btnDeleteAll" style="display:none;" onclick="deleteAll()">&#128465; Hapus Semua</button>
+            </div>
+
+            <div class="timer" id="timer" style="background: rgba(56, 239, 125, 0.1); border-color: rgba(56, 239, 125, 0.3); color: #38ef7d;">
+                &#9989; Email permanen - tidak akan expired
+            </div>
+        </div>
+
+        <!-- Inbox -->
+        <div class="card" id="inboxCard" style="display:none;">
+            <div class="inbox-header">
+                <h2>&#128229; Inbox <span class="badge" id="emailCount">0</span></h2>
+                <div class="auto-refresh">
+                    <span class="pulse-dot"></span>
+                    Auto-refresh setiap 15 detik
+                </div>
+            </div>
+
+            <div id="emailList">
+                <div class="empty-state">
+                    <div class="empty-icon">&#128237;</div>
+                    <p>Belum ada email masuk</p>
+                    <p class="hint">Kirim email ke alamat di atas untuk testing</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info -->
+        <div class="card" style="text-align:center; padding:20px;">
+            <p style="color:#888; font-size:0.9em; line-height:1.6;">
+                &#128231; Email diterima via <strong>Cloudflare Email Routing</strong> &rarr; Gmail &rarr; IMAP poll<br>
+                &#9201; Refresh otomatis setiap 15 detik<br>
+                &#128274; Pakai username spesifik per layanan untuk anti-spam tracker
+            </p>
+        </div>
+    </div>
+
+    <!-- Email Detail Modal -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modalSubject">Subject</h3>
+                <button class="modal-close" onclick="closeModalDirect()">&times;</button>
+            </div>
+            <div class="modal-meta">
+                <p><strong>Dari:</strong> <span id="modalFrom"></span></p>
+                <p><strong>Tanggal:</strong> <span id="modalDate"></span></p>
+            </div>
+            <div class="modal-body" id="modalBody">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let currentEmail = "";
+        let refreshInterval = null;
+
+        // Generate Email
+        async function generateEmail(forceRandom = false) {
+            const usernameInput = document.getElementById("customUsername");
+            const username = forceRandom ? "" : usernameInput.value.trim();
+
+            try {
+                const res = await fetch("/api/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: username }),
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showToast(data.error || "Gagal generate email", true);
+                    return;
+                }
+
+                currentEmail = data.email;
+
+                // Save to localStorage so persistent across refresh
+                localStorage.setItem("tempmail_email", currentEmail);
+
+                // Update UI
+                document.getElementById("emailPlaceholder").style.display = "none";
+                document.getElementById("emailText").style.display = "block";
+                document.getElementById("emailText").textContent = currentEmail;
+                document.getElementById("btnCopy").style.display = "inline-flex";
+                document.getElementById("btnDeleteAll").style.display = "inline-flex";
+                document.getElementById("inboxCard").style.display = "block";
+                document.getElementById("timer").classList.add("active");
+
+                // Start auto-refresh
+                if (refreshInterval) clearInterval(refreshInterval);
+                refreshInterval = setInterval(fetchInbox, 15000);
+                fetchInbox();
+
+                showToast("Email berhasil dibuat!");
+                usernameInput.value = "";
+
+            } catch (err) {
+                showToast("Error: " + err.message, true);
+            }
+        }
+
+        // Fetch Inbox
+        async function fetchInbox() {
+            if (!currentEmail) return;
+
+            try {
+                const res = await fetch(`/api/inbox?email=${encodeURIComponent(currentEmail)}`);
+                const data = await res.json();
+
+                if (!res.ok) return;
+
+                document.getElementById("emailCount").textContent = data.count;
+                renderEmails(data.messages);
+            } catch (err) {
+                console.error("Fetch inbox error:", err);
+            }
+        }
+
+        // Render email list
+        function renderEmails(emails) {
+            const container = document.getElementById("emailList");
+
+            if (emails.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">&#128237;</div>
+                        <p>Belum ada email masuk</p>
+                        <p class="hint">Kirim email ke <strong>${currentEmail}</strong> untuk testing</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = emails.map(email => {
+                const initial = (email.from || "?")[0].toUpperCase();
+                const unreadClass = email.read ? "" : "unread";
+                return `
+                    <div class="email-item ${unreadClass}" onclick="openEmail('${email.id}')">
+                        <div class="email-avatar">${initial}</div>
+                        <div class="email-content">
+                            <div class="email-from">${escapeHtml(email.from)}</div>
+                            <div class="email-subject">${escapeHtml(email.subject)}</div>
+                        </div>
+                        <div class="email-date">${email.date}</div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        // Open email detail
+        async function openEmail(emailId) {
+            document.getElementById("modalOverlay").classList.add("active");
+            document.getElementById("modalBody").innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const res = await fetch(`/api/email/${emailId}?email=${encodeURIComponent(currentEmail)}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    document.getElementById("modalBody").textContent = data.error || "Error";
+                    return;
+                }
+
+                document.getElementById("modalSubject").textContent = data.subject;
+                document.getElementById("modalFrom").textContent = data.from;
+                document.getElementById("modalDate").textContent = data.date;
+
+                if (data.html_body) {
+                    // Render HTML email in sandbox iframe
+                    const iframe = document.createElement("iframe");
+                    iframe.sandbox = "allow-same-origin";
+                    iframe.srcdoc = data.html_body;
+                    document.getElementById("modalBody").innerHTML = "";
+                    document.getElementById("modalBody").appendChild(iframe);
+                } else {
+                    document.getElementById("modalBody").innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;">${escapeHtml(data.body || "(Kosong)")}</pre>`;
+                }
+
+                // Refresh inbox to update read status
+                fetchInbox();
+            } catch (err) {
+                document.getElementById("modalBody").textContent = "Error: " + err.message;
+            }
+        }
+
+        // Close modal
+        function closeModal(event) {
+            if (event.target === document.getElementById("modalOverlay")) {
+                closeModalDirect();
+            }
+        }
+
+        function closeModalDirect() {
+            document.getElementById("modalOverlay").classList.remove("active");
+        }
+
+        // Copy email
+        function copyEmail() {
+            navigator.clipboard.writeText(currentEmail).then(() => {
+                showToast("Email berhasil dicopy!");
+            }).catch(() => {
+                // Fallback
+                const input = document.createElement("input");
+                input.value = currentEmail;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand("copy");
+                document.body.removeChild(input);
+                showToast("Email berhasil dicopy!");
+            });
+        }
+
+        // Delete all
+        async function deleteAll() {
+            if (!confirm("Hapus semua email di inbox?")) return;
+
+            try {
+                await fetch(`/api/delete-all?email=${encodeURIComponent(currentEmail)}`, { method: "DELETE" });
+                fetchInbox();
+                showToast("Semua email dihapus!");
+            } catch (err) {
+                showToast("Error: " + err.message, true);
+            }
+        }
+
+        // Restore email from localStorage on page load
+        window.addEventListener("DOMContentLoaded", () => {
+            const saved = localStorage.getItem("tempmail_email");
+            if (saved) {
+                currentEmail = saved;
+                document.getElementById("emailPlaceholder").style.display = "none";
+                document.getElementById("emailText").style.display = "block";
+                document.getElementById("emailText").textContent = currentEmail;
+                document.getElementById("btnCopy").style.display = "inline-flex";
+                document.getElementById("btnDeleteAll").style.display = "inline-flex";
+                document.getElementById("inboxCard").style.display = "block";
+                document.getElementById("timer").classList.add("active");
+
+                if (refreshInterval) clearInterval(refreshInterval);
+                refreshInterval = setInterval(fetchInbox, 15000);
+                fetchInbox();
+            }
+        });
+
+        // Toast notification
+        function showToast(message, isError = false) {
+            const toast = document.getElementById("toast");
+            toast.textContent = message;
+            toast.style.background = isError ? "rgba(255, 65, 108, 0.9)" : "rgba(0, 210, 255, 0.9)";
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 3000);
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text || "";
+            return div.innerHTML;
+        }
+
+        // Keyboard shortcut - ESC to close modal
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") closeModalDirect();
+        });
+
+        // Enter key to generate
+        document.getElementById("customUsername").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") generateEmail();
+        });
+    </script>
+</body>
+</html>
