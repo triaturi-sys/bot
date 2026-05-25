@@ -1,53 +1,64 @@
 """
-Temporary Email Web Application
-Domain: @sanz.com
+Temporary Email Web Application - IMAP Mode
+Domain: bookinglapanganfutsal.my.id
 
-Fitur:
-- Generate email address random @sanz.com
-- Terima email masuk (simulasi via SMTP server built-in)
-- Inbox real-time dengan auto-refresh
-- Hapus email otomatis setelah expired (30 menit)
-- Copy email address ke clipboard
-- API endpoint untuk integrasi
+Cara kerja:
+1. User generate email custom (misal: otp@bookinglapanganfutsal.my.id)
+2. Cloudflare Email Routing forward email ke Gmail kamu
+3. Aplikasi ini baca Gmail via IMAP setiap 15 detik
+4. Email yang tujuannya ke domain kita ditampilkan di web
+
+Environment Variables (.env):
+- GMAIL_EMAIL=your@gmail.com
+- GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
+- DOMAIN=bookinglapanganfutsal.my.id (default)
+- POLL_INTERVAL=15 (detik, default)
 """
 
 from __future__ import annotations
 
-import asyncio
 import email
+import imaplib
+import os
 import random
+import re
 import string
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.policy import default as default_policy
 from typing import Any
 
-from aiosmtpd.controller import Controller
-from aiosmtpd.smtp import Envelope, Session, SMTP
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, session
 from flask_cors import CORS
 
+load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
+DOMAIN = os.environ.get("DOMAIN", "bookinglapanganfutsal.my.id")
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "15"))
+SECRET_KEY = os.environ.get("SECRET_KEY", "tempmail-change-this-in-production")
+
 app = Flask(__name__)
-app.secret_key = "tempmail-secret-key-change-in-production"
+app.secret_key = SECRET_KEY
 CORS(app)
 
-# Domain untuk temp mail
-DOMAIN = "sanz.com"
-
-# Penyimpanan email di memory (production: gunakan Redis/DB)
-# Format: {email_address: [{"id": ..., "from": ..., "subject": ..., "body": ..., "date": ..., "read": bool}]}
+# Penyimpanan email di memory (per session restart akan refresh dari Gmail)
+# Format: {email_address: [{"id": ..., "from": ..., "subject": ...}]}
 mailbox: dict[str, list[dict[str, Any]]] = {}
 
-# Mapping session ke email address
-active_addresses: dict[str, dict[str, Any]] = {}
+# Track Gmail message IDs yang sudah di-fetch (biar tidak duplicate)
+fetched_uids: set[str] = set()
 
 # Lock untuk thread safety
 mail_lock = threading.Lock()
-
-# Waktu expired email (30 menit)
-EMAIL_EXPIRE_MINUTES = 30
 
 
 # ---------------------------------------------------------------------------
@@ -62,84 +73,176 @@ def generate_username(length: int = 10) -> str:
 
 def generate_email() -> str:
     """Generate alamat email temporary."""
-    username = generate_username()
-    return f"{username}@{DOMAIN}"
+    return f"{generate_username()}@{DOMAIN}"
 
 
-def cleanup_expired():
-    """Hapus email dan address yang sudah expired."""
-    while True:
-        time.sleep(60)  # Check setiap menit
-        now = datetime.now()
-        with mail_lock:
-            expired_keys = []
-            for addr, info in active_addresses.items():
-                if now > info["expires_at"]:
-                    expired_keys.append(addr)
-            for addr in expired_keys:
-                del active_addresses[addr]
-                if addr in mailbox:
-                    del mailbox[addr]
+def extract_recipient(msg) -> str | None:
+    """Cari alamat tujuan original yang berakhiran @DOMAIN dari header email."""
+    headers_to_check = [
+        msg.get("To", ""),
+        msg.get("Delivered-To", ""),
+        msg.get("X-Forwarded-To", ""),
+        msg.get("X-Original-To", ""),
+        msg.get("Cc", ""),
+    ]
+
+    pattern = re.compile(r"[\w\.\-+]+@[\w\.\-]+", re.IGNORECASE)
+    for header in headers_to_check:
+        if not header:
+            continue
+        for match in pattern.findall(header):
+            addr = match.lower()
+            if addr.endswith(f"@{DOMAIN.lower()}"):
+                return addr
+    return None
 
 
-# ---------------------------------------------------------------------------
-# SMTP Handler - Menerima email masuk
-# ---------------------------------------------------------------------------
+def parse_email_body(msg) -> tuple[str, str]:
+    """Extract plain text dan HTML body dari email."""
+    body = ""
+    html_body = ""
 
-class TempMailHandler:
-    """Handler untuk menerima email via SMTP."""
-
-    async def handle_RCPT(self, server, session: Session, envelope: Envelope, address: str, rcpt_options: list):
-        """Validasi recipient - hanya terima untuk domain kita."""
-        if not address.endswith(f"@{DOMAIN}"):
-            return f"550 No such user at {DOMAIN}"
-        envelope.rcpt_tos.append(address)
-        return "250 OK"
-
-    async def handle_DATA(self, server, session: Session, envelope: Envelope):
-        """Proses email masuk dan simpan ke mailbox."""
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            disposition = str(part.get("Content-Disposition", ""))
+            if "attachment" in disposition:
+                continue
+            try:
+                if content_type == "text/plain" and not body:
+                    body = part.get_content()
+                elif content_type == "text/html" and not html_body:
+                    html_body = part.get_content()
+            except Exception:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    try:
+                        decoded = payload.decode("utf-8", errors="replace")
+                        if content_type == "text/plain" and not body:
+                            body = decoded
+                        elif content_type == "text/html" and not html_body:
+                            html_body = decoded
+                    except Exception:
+                        pass
+    else:
         try:
-            msg = email.message_from_bytes(envelope.content, policy=default_policy)
-
-            # Extract body
-            body = ""
-            html_body = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    if content_type == "text/plain":
-                        body = part.get_content()
-                    elif content_type == "text/html":
-                        html_body = part.get_content()
+            content = msg.get_content()
+            if msg.get_content_type() == "text/html":
+                html_body = content
             else:
-                content_type = msg.get_content_type()
-                if content_type == "text/html":
-                    html_body = msg.get_content()
-                else:
-                    body = msg.get_content()
+                body = content
+        except Exception:
+            pass
+
+    return body, html_body
+
+
+# ---------------------------------------------------------------------------
+# IMAP Poller - Baca Gmail dan filter untuk domain kita
+# ---------------------------------------------------------------------------
+
+def fetch_emails_from_gmail() -> int:
+    """Connect ke Gmail IMAP dan ambil email baru untuk domain kita.
+
+    Returns:
+        Jumlah email baru yang di-fetch.
+    """
+    if not GMAIL_EMAIL or not GMAIL_APP_PASSWORD:
+        return 0
+
+    new_count = 0
+    imap = None
+    try:
+        imap = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+        imap.login(GMAIL_EMAIL, GMAIL_APP_PASSWORD)
+        imap.select("INBOX")
+
+        # Cari email yang TO/CC mengandung domain kita
+        # ALL = ambil semua, lalu filter manual via header
+        status, data = imap.uid("search", None, "ALL")
+        if status != "OK":
+            return 0
+
+        uids = data[0].split()
+        # Ambil 50 terbaru aja biar cepat
+        uids = uids[-50:] if len(uids) > 50 else uids
+
+        for uid in uids:
+            uid_str = uid.decode() if isinstance(uid, bytes) else str(uid)
+
+            # Skip kalau sudah pernah di-fetch
+            if uid_str in fetched_uids:
+                continue
+
+            status, msg_data = imap.uid("fetch", uid, "(RFC822)")
+            if status != "OK" or not msg_data or not msg_data[0]:
+                continue
+
+            raw_email = msg_data[0][1]
+            if not isinstance(raw_email, (bytes, bytearray)):
+                continue
+
+            msg = email.message_from_bytes(raw_email, policy=default_policy)
+
+            recipient = extract_recipient(msg)
+            if not recipient:
+                fetched_uids.add(uid_str)
+                continue
+
+            subject = str(msg.get("subject", "(No Subject)"))
+            from_addr = str(msg.get("from", "Unknown"))
+            date_str = str(msg.get("date", ""))
+
+            body, html_body = parse_email_body(msg)
 
             mail_data = {
                 "id": str(uuid.uuid4()),
-                "from": str(envelope.mail_from),
-                "to": envelope.rcpt_tos,
-                "subject": msg.get("subject", "(No Subject)"),
+                "uid": uid_str,
+                "from": from_addr,
+                "to": recipient,
+                "subject": subject,
                 "body": body,
                 "html_body": html_body,
                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "raw_date": date_str,
                 "read": False,
             }
 
             with mail_lock:
-                for recipient in envelope.rcpt_tos:
-                    recipient_lower = recipient.lower()
-                    if recipient_lower not in mailbox:
-                        mailbox[recipient_lower] = []
-                    mailbox[recipient_lower].append(mail_data)
+                if recipient not in mailbox:
+                    mailbox[recipient] = []
+                mailbox[recipient].append(mail_data)
+                fetched_uids.add(uid_str)
+                new_count += 1
 
-            return "250 Message accepted for delivery"
+        imap.close()
+
+    except imaplib.IMAP4.error as e:
+        print(f"[IMAP] Login/Auth error: {e}")
+    except Exception as e:
+        print(f"[IMAP] Error: {e}")
+    finally:
+        if imap is not None:
+            try:
+                imap.logout()
+            except Exception:
+                pass
+
+    if new_count > 0:
+        print(f"[IMAP] Fetched {new_count} new email(s)")
+
+    return new_count
+
+
+def imap_poll_loop():
+    """Background thread - polling Gmail terus menerus."""
+    print(f"[IMAP] Poller started (interval: {POLL_INTERVAL}s)")
+    while True:
+        try:
+            fetch_emails_from_gmail()
         except Exception as e:
-            print(f"[SMTP] Error processing email: {e}")
-            return "500 Error processing message"
+            print(f"[IMAP] Poll error: {e}")
+        time.sleep(POLL_INTERVAL)
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +251,7 @@ class TempMailHandler:
 
 @app.route("/")
 def index():
-    """Halaman utama - tampilkan inbox temp mail."""
+    """Halaman utama."""
     return render_template("index.html", domain=DOMAIN)
 
 
@@ -159,7 +262,6 @@ def api_generate():
     custom_name = data.get("username", "").strip().lower()
 
     if custom_name:
-        # Validasi custom username
         if not all(c in string.ascii_lowercase + string.digits + "._-" for c in custom_name):
             return jsonify({"error": "Username hanya boleh huruf kecil, angka, titik, underscore, dan dash"}), 400
         if len(custom_name) < 3 or len(custom_name) > 30:
@@ -168,38 +270,35 @@ def api_generate():
     else:
         email_addr = generate_email()
 
-    expires_at = datetime.now() + timedelta(minutes=EMAIL_EXPIRE_MINUTES)
-
     with mail_lock:
         if email_addr not in mailbox:
             mailbox[email_addr] = []
-        active_addresses[email_addr] = {
-            "created_at": datetime.now(),
-            "expires_at": expires_at,
-        }
 
     session["email"] = email_addr
 
     return jsonify({
         "email": email_addr,
-        "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S"),
-        "expires_in_minutes": EMAIL_EXPIRE_MINUTES,
+        "expires_at": "never",
+        "expires_in_minutes": 0,
+        "permanent": True,
     })
 
 
 @app.route("/api/inbox")
 def api_inbox():
-    """Ambil daftar email di inbox."""
+    """Ambil daftar email di inbox + trigger fetch on-demand."""
     email_addr = request.args.get("email", "").lower()
     if not email_addr:
         email_addr = session.get("email", "")
 
-    if not email_addr or not email_addr.endswith(f"@{DOMAIN}"):
+    if not email_addr or not email_addr.endswith(f"@{DOMAIN.lower()}"):
         return jsonify({"error": "Email address tidak valid"}), 400
+
+    # On-demand fetch (best effort, jangan blocking lama)
+    threading.Thread(target=fetch_emails_from_gmail, daemon=True).start()
 
     with mail_lock:
         emails = mailbox.get(email_addr, [])
-        # Sort by date descending
         emails_sorted = sorted(emails, key=lambda x: x["date"], reverse=True)
 
     return jsonify({
@@ -211,11 +310,10 @@ def api_inbox():
 
 @app.route("/api/email/<email_id>")
 def api_read_email(email_id: str):
-    """Baca satu email berdasarkan ID."""
+    """Baca satu email."""
     email_addr = request.args.get("email", "").lower()
     if not email_addr:
         email_addr = session.get("email", "")
-
     if not email_addr:
         return jsonify({"error": "Email address tidak ditemukan"}), 400
 
@@ -231,11 +329,10 @@ def api_read_email(email_id: str):
 
 @app.route("/api/delete/<email_id>", methods=["DELETE"])
 def api_delete_email(email_id: str):
-    """Hapus satu email."""
+    """Hapus satu email dari tampilan."""
     email_addr = request.args.get("email", "").lower()
     if not email_addr:
         email_addr = session.get("email", "")
-
     if not email_addr:
         return jsonify({"error": "Email address tidak ditemukan"}), 400
 
@@ -252,7 +349,6 @@ def api_delete_all():
     email_addr = request.args.get("email", "").lower()
     if not email_addr:
         email_addr = session.get("email", "")
-
     if not email_addr:
         return jsonify({"error": "Email address tidak ditemukan"}), 400
 
@@ -262,32 +358,60 @@ def api_delete_all():
     return jsonify({"success": True})
 
 
+@app.route("/api/refresh", methods=["POST"])
+def api_refresh():
+    """Force refresh inbox dari Gmail."""
+    new_count = fetch_emails_from_gmail()
+    return jsonify({"new_emails": new_count})
+
+
 @app.route("/api/stats")
 def api_stats():
     """Statistik server."""
     with mail_lock:
-        total_addresses = len(active_addresses)
+        total_addresses = len(mailbox)
         total_emails = sum(len(v) for v in mailbox.values())
 
     return jsonify({
         "domain": DOMAIN,
         "active_addresses": total_addresses,
         "total_emails": total_emails,
-        "expire_minutes": EMAIL_EXPIRE_MINUTES,
+        "imap_configured": bool(GMAIL_EMAIL and GMAIL_APP_PASSWORD),
+        "poll_interval": POLL_INTERVAL,
     })
 
 
+@app.route("/health")
+def health():
+    """Health check endpoint untuk Render."""
+    return jsonify({"status": "ok", "domain": DOMAIN})
+
+
 # ---------------------------------------------------------------------------
-# SMTP Server startup
+# Start IMAP poller saat app dimuat (untuk gunicorn dan flask)
 # ---------------------------------------------------------------------------
 
-def start_smtp_server():
-    """Jalankan SMTP server di background thread."""
-    handler = TempMailHandler()
-    controller = Controller(handler, hostname="127.0.0.1", port=2525)
-    controller.start()
-    print(f"[SMTP] Server berjalan di port 2525 untuk domain @{DOMAIN}")
-    return controller
+_poller_started = False
+_poller_lock = threading.Lock()
+
+
+def ensure_poller_started():
+    global _poller_started
+    with _poller_lock:
+        if _poller_started:
+            return
+        if not (GMAIL_EMAIL and GMAIL_APP_PASSWORD):
+            print("[WARN] GMAIL_EMAIL atau GMAIL_APP_PASSWORD belum diset. IMAP poller tidak jalan.")
+            print("[WARN] Set environment variables di .env atau di Render dashboard.")
+            _poller_started = True
+            return
+        thread = threading.Thread(target=imap_poll_loop, daemon=True)
+        thread.start()
+        _poller_started = True
+
+
+# Jalankan saat module dimuat (works for gunicorn juga)
+ensure_poller_started()
 
 
 # ---------------------------------------------------------------------------
@@ -295,22 +419,8 @@ def start_smtp_server():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import os
-
-    # Start cleanup thread
-    cleanup_thread = threading.Thread(target=cleanup_expired, daemon=True)
-    cleanup_thread.start()
-
-    # Start SMTP server
-    smtp_controller = start_smtp_server()
-
-    # Start Flask web server
     port = int(os.environ.get("PORT", 5000))
-    print(f"[WEB] Temp Mail berjalan di http://localhost:{port}")
+    print(f"[WEB] TempMail running at http://localhost:{port}")
     print(f"[WEB] Domain: @{DOMAIN}")
-    print(f"[SMTP] Kirim email ke port 2525 untuk testing")
-
-    try:
-        app.run(host="0.0.0.0", port=port, debug=False)
-    finally:
-        smtp_controller.stop()
+    print(f"[IMAP] Source Gmail: {GMAIL_EMAIL or '(not configured)'}")
+    app.run(host="0.0.0.0", port=port, debug=False)

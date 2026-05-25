@@ -495,7 +495,7 @@
         <!-- Header -->
         <div class="header">
             <h1>&#9993; TempMail</h1>
-            <p>Email sementara gratis dengan domain <strong>@{{ domain }}</strong></p>
+            <p>Email custom permanen dengan domain <strong>@{{ domain }}</strong></p>
         </div>
 
         <!-- Email Generator -->
@@ -518,8 +518,8 @@
                 <button class="btn btn-danger" id="btnDeleteAll" style="display:none;" onclick="deleteAll()">&#128465; Hapus Semua</button>
             </div>
 
-            <div class="timer" id="timer">
-                &#9200; Email akan expired dalam: <strong id="timerText">30:00</strong>
+            <div class="timer" id="timer" style="background: rgba(56, 239, 125, 0.1); border-color: rgba(56, 239, 125, 0.3); color: #38ef7d;">
+                &#9989; Email permanen - tidak akan expired
             </div>
         </div>
 
@@ -529,7 +529,7 @@
                 <h2>&#128229; Inbox <span class="badge" id="emailCount">0</span></h2>
                 <div class="auto-refresh">
                     <span class="pulse-dot"></span>
-                    Auto-refresh setiap 5 detik
+                    Auto-refresh setiap 15 detik
                 </div>
             </div>
 
@@ -544,9 +544,10 @@
 
         <!-- Info -->
         <div class="card" style="text-align:center; padding:20px;">
-            <p style="color:#666; font-size:0.9em;">
-                &#128274; Email bersifat sementara dan akan dihapus otomatis setelah 30 menit.<br>
-                &#9888;&#65039; Jangan gunakan untuk menerima informasi sensitif.
+            <p style="color:#888; font-size:0.9em; line-height:1.6;">
+                &#128231; Email diterima via <strong>Cloudflare Email Routing</strong> &rarr; Gmail &rarr; IMAP poll<br>
+                &#9201; Refresh otomatis setiap 15 detik<br>
+                &#128274; Pakai username spesifik per layanan untuk anti-spam tracker
             </p>
         </div>
     </div>
@@ -574,8 +575,6 @@
     <script>
         let currentEmail = "";
         let refreshInterval = null;
-        let timerInterval = null;
-        let expiresAt = null;
 
         // Generate Email
         async function generateEmail(forceRandom = false) {
@@ -597,7 +596,9 @@
                 }
 
                 currentEmail = data.email;
-                expiresAt = new Date(data.expires_at.replace(" ", "T"));
+
+                // Save to localStorage so persistent across refresh
+                localStorage.setItem("tempmail_email", currentEmail);
 
                 // Update UI
                 document.getElementById("emailPlaceholder").style.display = "none";
@@ -610,13 +611,8 @@
 
                 // Start auto-refresh
                 if (refreshInterval) clearInterval(refreshInterval);
-                refreshInterval = setInterval(fetchInbox, 5000);
+                refreshInterval = setInterval(fetchInbox, 15000);
                 fetchInbox();
-
-                // Start timer
-                if (timerInterval) clearInterval(timerInterval);
-                timerInterval = setInterval(updateTimer, 1000);
-                updateTimer();
 
                 showToast("Email berhasil dibuat!");
                 usernameInput.value = "";
@@ -750,25 +746,24 @@
             }
         }
 
-        // Timer update
-        function updateTimer() {
-            if (!expiresAt) return;
-            const now = new Date();
-            const diff = expiresAt - now;
+        // Restore email from localStorage on page load
+        window.addEventListener("DOMContentLoaded", () => {
+            const saved = localStorage.getItem("tempmail_email");
+            if (saved) {
+                currentEmail = saved;
+                document.getElementById("emailPlaceholder").style.display = "none";
+                document.getElementById("emailText").style.display = "block";
+                document.getElementById("emailText").textContent = currentEmail;
+                document.getElementById("btnCopy").style.display = "inline-flex";
+                document.getElementById("btnDeleteAll").style.display = "inline-flex";
+                document.getElementById("inboxCard").style.display = "block";
+                document.getElementById("timer").classList.add("active");
 
-            if (diff <= 0) {
-                document.getElementById("timerText").textContent = "EXPIRED";
-                clearInterval(timerInterval);
-                clearInterval(refreshInterval);
-                showToast("Email sudah expired!", true);
-                return;
+                if (refreshInterval) clearInterval(refreshInterval);
+                refreshInterval = setInterval(fetchInbox, 15000);
+                fetchInbox();
             }
-
-            const minutes = Math.floor(diff / 60000);
-            const seconds = Math.floor((diff % 60000) / 1000);
-            document.getElementById("timerText").textContent =
-                `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-        }
+        });
 
         // Toast notification
         function showToast(message, isError = false) {
